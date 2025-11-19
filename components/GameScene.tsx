@@ -65,11 +65,11 @@ const GameScene: React.FC<GameSceneProps> = ({
   }
 
   useFrame((state, delta) => {
-    // --- Power-Up Effects ---
-    // Jump slam attack - clear all active notes
-    if (activePowerUp === 'jump' && lastPowerUpRef.current !== 'jump') {
-        lastPowerUpRef.current = 'jump';
-        // Hit all active notes
+    // --- Spell Effects ---
+    // Lightning spell - clear all creatures on screen
+    if (activePowerUp === 'lightning' && lastPowerUpRef.current !== 'lightning') {
+        lastPowerUpRef.current = 'lightning';
+        // Defeat all active creatures
         activeNotesRef.current.forEach(note => {
             if (!note.hit && !note.missed) {
                 note.hit = true;
@@ -79,16 +79,16 @@ const GameScene: React.FC<GameSceneProps> = ({
         });
         activeNotesRef.current = [];
         shakeIntensity.current = 1.0; // Big shake!
-    } else if (activePowerUp !== 'jump') {
-        if (lastPowerUpRef.current === 'jump') {
+    } else if (activePowerUp !== 'lightning') {
+        if (lastPowerUpRef.current === 'lightning') {
             lastPowerUpRef.current = null;
         }
     }
 
-    // Tornado effect rotation
+    // Tornado spell effect rotation
     if (tornadoEffectRef.current) {
-        tornadoEffectRef.current.visible = activePowerUp === 'spin';
-        if (activePowerUp === 'spin') {
+        tornadoEffectRef.current.visible = activePowerUp === 'tornado';
+        if (activePowerUp === 'tornado') {
             tornadoEffectRef.current.rotation.y += delta * 3;
             tornadoEffectRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.3 + 1.5;
         }
@@ -181,8 +181,8 @@ const GameScene: React.FC<GameSceneProps> = ({
             continue;
         }
 
-        // Tornado auto-hit (spin power-up)
-        if (activePowerUp === 'spin' && currentZ > PLAYER_Z - 2 && currentZ < PLAYER_Z + 0.5) {
+        // Tornado spell auto-defeat (tornado power-up)
+        if (activePowerUp === 'tornado' && currentZ > PLAYER_Z - 2 && currentZ < PLAYER_Z + 0.5) {
             const notePos = vecA.set(
                 LANE_X_POSITIONS[note.lineIndex],
                 LAYER_Y_POSITIONS[note.lineLayer],
@@ -190,7 +190,7 @@ const GameScene: React.FC<GameSceneProps> = ({
             );
             const playerPos = vecB.set(0, 1.5, PLAYER_Z);
 
-            // Auto-hit notes within tornado radius
+            // Auto-defeat creatures within tornado radius
             if (playerPos.distanceTo(notePos) < 2.5) {
                 note.hit = true;
                 note.hitTime = time;
