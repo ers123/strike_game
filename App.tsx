@@ -12,7 +12,8 @@ import { DEMO_CHART, SONG_URL, SONG_BPM } from './constants';
 import { useMediaPipe, BodyMovement } from './hooks/useMediaPipe';
 import GameScene from './components/GameScene';
 import WebcamPreview from './components/WebcamPreview';
-import { Play, RefreshCw, VideoOff, Hand, Sparkles, Zap, Shield, Wind, Star } from 'lucide-react';
+import TutorialModal from './components/TutorialModal';
+import { Play, RefreshCw, VideoOff, Hand, Sparkles, Zap, Shield, Wind, Star, HelpCircle } from 'lucide-react';
 
 export type PowerUp = {
   type: BodyMovement;
@@ -31,6 +32,7 @@ const App: React.FC = () => {
   const [powerUpTimeLeft, setPowerUpTimeLeft] = useState(0);
   const [shieldActive, setShieldActive] = useState(false);
   const [shieldCharges, setShieldCharges] = useState(0);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(new Audio(SONG_URL));
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -359,12 +361,20 @@ const App: React.FC = () => {
                                <VideoOff /> Camera not ready yet.
                            </div>
                       ) : (
-                          <button 
-                              onClick={startGame}
-                              className="bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] flex items-center justify-center mx-auto gap-3"
-                          >
-                              <Play fill="currentColor" /> START GAME
-                          </button>
+                          <div className="flex flex-col items-center gap-3">
+                              <button
+                                  onClick={startGame}
+                                  className="bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] flex items-center justify-center gap-3"
+                              >
+                                  <Play fill="currentColor" /> START GAME
+                              </button>
+                              <button
+                                  onClick={() => setShowTutorial(true)}
+                                  className="bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-2 px-6 rounded-full transition-all flex items-center gap-2"
+                              >
+                                  <HelpCircle className="w-4 h-4" /> How to Play
+                              </button>
+                          </div>
                       )}
 
                       <div className="text-white/30 text-sm text-center mt-8">
@@ -389,6 +399,9 @@ const App: React.FC = () => {
               )}
           </div>
       </div>
+
+      {/* Tutorial Modal */}
+      <TutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
     </div>
   );
 };

@@ -1,0 +1,75 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#000000;stop-opacity:1" />
+    </linearGradient>
+
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+
+  <!-- Stars -->
+  <circle cx="100" cy="80" r="2" fill="white" opacity="0.6"/>
+  <circle cx="200" cy="120" r="3" fill="white" opacity="0.8"/>
+  <circle cx="950" cy="100" r="2" fill="white" opacity="0.5"/>
+  <circle cx="1050" cy="150" r="2.5" fill="white" opacity="0.7"/>
+  <circle cx="300" cy="500" r="2" fill="white" opacity="0.6"/>
+  <circle cx="1100" cy="520" r="3" fill="white" opacity="0.8"/>
+
+  <!-- Main Title -->
+  <text x="600" y="200" font-family="Arial Black, sans-serif" font-size="120" font-weight="900"
+        fill="#ffffff" text-anchor="middle" filter="url(#glow)">
+    TEMPO
+  </text>
+  <text x="600" y="320" font-family="Arial Black, sans-serif" font-size="120" font-weight="900"
+        fill="#3b82f6" text-anchor="middle" filter="url(#glow)">
+    STRIKE
+  </text>
+
+  <!-- Subtitle -->
+  <text x="600" y="390" font-family="Arial, sans-serif" font-size="40" font-weight="bold"
+        fill="#fbbf24" text-anchor="middle" opacity="0.9">
+    Dance Party Edition
+  </text>
+
+  <!-- Power-up icons with labels -->
+  <g transform="translate(200, 450)">
+    <circle cx="0" cy="0" r="35" fill="#fb923c" opacity="0.3"/>
+    <text x="0" y="15" font-size="40" text-anchor="middle">⚡</text>
+    <text x="0" y="65" font-size="18" fill="white" text-anchor="middle" font-weight="bold">JUMP</text>
+  </g>
+
+  <g transform="translate(400, 450)">
+    <circle cx="0" cy="0" r="35" fill="#06b6d4" opacity="0.3"/>
+    <text x="0" y="15" font-size="40" text-anchor="middle">🛡️</text>
+    <text x="0" y="65" font-size="18" fill="white" text-anchor="middle" font-weight="bold">SQUAT</text>
+  </g>
+
+  <g transform="translate(800, 450)">
+    <circle cx="0" cy="0" r="35" fill="#a855f7" opacity="0.3"/>
+    <text x="0" y="15" font-size="40" text-anchor="middle">🌀</text>
+    <text x="0" y="65" font-size="18" fill="white" text-anchor="middle" font-weight="bold">SPIN</text>
+  </g>
+
+  <g transform="translate(1000, 450)">
+    <circle cx="0" cy="0" r="35" fill="#fbbf24" opacity="0.3"/>
+    <text x="0" y="15" font-size="40" text-anchor="middle">⭐</text>
+    <text x="0" y="65" font-size="18" fill="white" text-anchor="middle" font-weight="bold">DAB</text>
+  </g>
+
+  <!-- Footer tag line -->
+  <text x="600" y="580" font-family="Arial, sans-serif" font-size="24"
+        fill="#94a3b8" text-anchor="middle" opacity="0.8">
+    Motion-Controlled Rhythm Game for Kids • Tablet Ready
+  </text>
+</svg>
