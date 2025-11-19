@@ -72,7 +72,7 @@ const App: React.FC = () => {
               const newCharges = c - 1;
               if (newCharges === 0) {
                   setShieldActive(false);
-                  if (activePowerUp === 'squat') {
+                  if (activePowerUp === 'shield') {
                       setActivePowerUp(null);
                       setPowerUpTimeLeft(0);
                   }
@@ -155,30 +155,30 @@ const App: React.FC = () => {
               }
 
               switch (detectedMovement) {
-                  case 'jump':
-                      // Jump = Slam attack (clears all notes on screen)
-                      setActivePowerUp('jump');
+                  case 'lightning':
+                      // Lightning Spell = Clears all creatures on screen
+                      setActivePowerUp('lightning');
                       setPowerUpTimeLeft(1); // Instant effect
                       setScore(s => s + 500); // Bonus points
                       break;
 
-                  case 'squat':
-                      // Squat = Shield bubble (protects from 3 misses)
+                  case 'shield':
+                      // Shield Spell = Protects from 3 attacks
                       setShieldActive(true);
                       setShieldCharges(3);
-                      setActivePowerUp('squat');
+                      setActivePowerUp('shield');
                       setPowerUpTimeLeft(5); // Visual effect duration
                       break;
 
-                  case 'spin':
-                      // Spin = Tornado mode (auto-collect notes in radius)
-                      setActivePowerUp('spin');
+                  case 'tornado':
+                      // Tornado Spell = Auto-defeat creatures in radius
+                      setActivePowerUp('tornado');
                       setPowerUpTimeLeft(5); // 5 seconds
                       break;
 
-                  case 'dab':
-                      // Dab = Confidence boost (bonus multiplier)
-                      setActivePowerUp('dab');
+                  case 'freeze':
+                      // Freeze Spell = Slow time and boost power
+                      setActivePowerUp('freeze');
                       setPowerUpTimeLeft(8); // 8 seconds
                       setMultiplier(m => m * 2); // Double current multiplier
                       setScore(s => s + 200); // Instant bonus
@@ -195,8 +195,8 @@ const App: React.FC = () => {
                   const newTime = Math.max(0, t - 0.1);
                   if (newTime === 0) {
                       setActivePowerUp(null);
-                      // Reset multiplier if dab is ending
-                      if (activePowerUp === 'dab') {
+                      // Reset multiplier if freeze spell is ending
+                      if (activePowerUp === 'freeze') {
                           setMultiplier(m => Math.max(1, m / 2));
                       }
                   }
@@ -285,20 +285,20 @@ const App: React.FC = () => {
                          <span className="text-cyan-100 font-bold">Shield x{shieldCharges}</span>
                      </div>
                  )}
-                 {activePowerUp && activePowerUp !== 'squat' && (
+                 {activePowerUp && activePowerUp !== 'shield' && (
                      <div className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 ${
-                         activePowerUp === 'jump' ? 'bg-orange-900/80 border-orange-400' :
-                         activePowerUp === 'spin' ? 'bg-purple-900/80 border-purple-400' :
-                         activePowerUp === 'dab' ? 'bg-yellow-900/80 border-yellow-400' :
+                         activePowerUp === 'lightning' ? 'bg-yellow-900/80 border-yellow-400' :
+                         activePowerUp === 'tornado' ? 'bg-purple-900/80 border-purple-400' :
+                         activePowerUp === 'freeze' ? 'bg-blue-900/80 border-blue-400' :
                          'bg-gray-900/80 border-gray-400'
                      } animate-pulse`}>
-                         {activePowerUp === 'jump' && <Zap className="w-6 h-6 text-orange-300" />}
-                         {activePowerUp === 'spin' && <Wind className="w-6 h-6 text-purple-300" />}
-                         {activePowerUp === 'dab' && <Star className="w-6 h-6 text-yellow-300" />}
+                         {activePowerUp === 'lightning' && <Zap className="w-6 h-6 text-yellow-300" />}
+                         {activePowerUp === 'tornado' && <Wind className="w-6 h-6 text-purple-300" />}
+                         {activePowerUp === 'freeze' && <Star className="w-6 h-6 text-blue-300" />}
                          <span className="text-white font-bold">
-                             {activePowerUp === 'jump' && 'SLAM!'}
-                             {activePowerUp === 'spin' && 'TORNADO'}
-                             {activePowerUp === 'dab' && 'DAB BOOST'}
+                             {activePowerUp === 'lightning' && 'LIGHTNING!'}
+                             {activePowerUp === 'tornado' && 'TORNADO!'}
+                             {activePowerUp === 'freeze' && 'FREEZE!'}
                          </span>
                          <span className="text-xs text-gray-300">{powerUpTimeLeft.toFixed(1)}s</span>
                      </div>
@@ -310,47 +310,50 @@ const App: React.FC = () => {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
               
               {gameStatus === GameStatus.LOADING && (
-                  <div className="bg-black/80 p-10 rounded-2xl flex flex-col items-center border border-blue-900/50 backdrop-blur-md">
-                      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-6"></div>
-                      <h2 className="text-2xl text-white font-bold mb-2">Initializing System</h2>
-                      <p className="text-blue-300">{!isCameraReady ? "Waiting for camera..." : "Loading assets..."}</p>
+                  <div className="bg-black/80 p-10 rounded-2xl flex flex-col items-center border border-purple-900/50 backdrop-blur-md">
+                      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500 mb-6"></div>
+                      <h2 className="text-2xl text-white font-bold mb-2">🔮 Preparing Spell Chamber...</h2>
+                      <p className="text-purple-300">{!isCameraReady ? "Awaiting magical vision..." : "Loading spellbook..."}</p>
                       {cameraError && <p className="text-red-500 mt-4 max-w-xs text-center">{cameraError}</p>}
                   </div>
               )}
 
               {gameStatus === GameStatus.IDLE && (
-                  <div className="bg-black/80 p-12 rounded-3xl text-center border-2 border-blue-500/30 backdrop-blur-xl max-w-lg">
+                  <div className="bg-black/80 p-12 rounded-3xl text-center border-2 border-purple-500/30 backdrop-blur-xl max-w-lg">
                       <div className="mb-6 flex justify-center">
-                         <Sparkles className="w-16 h-16 text-blue-400" />
+                         <Sparkles className="w-16 h-16 text-purple-400" />
                       </div>
-                      <h1 className="text-7xl font-black text-white mb-6 tracking-tighter italic drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]">
-                          TEMPO <span className="text-blue-500">STRIKE</span>
+                      <h1 className="text-6xl font-black text-white mb-3 tracking-tighter drop-shadow-[0_0_30px_rgba(168,85,247,0.6)]">
+                          SPELL SLINGER
                       </h1>
+                      <h2 className="text-4xl font-bold text-purple-400 mb-6 italic drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">
+                          Academy
+                      </h2>
                       <div className="space-y-3 text-gray-300 mb-8">
                           <p className="flex items-center justify-center gap-2">
-                              <Hand className="w-5 h-5 text-blue-400" />
+                              <Hand className="w-5 h-5 text-purple-400" />
                               <span>Stand back so your whole body is visible.</span>
                           </p>
-                          <p>Use your <span className="text-red-500 font-bold">LEFT</span> and <span className="text-blue-500 font-bold">RIGHT</span> hands to slash!</p>
+                          <p>Use your <span className="text-red-500 font-bold">LEFT</span> and <span className="text-blue-500 font-bold">RIGHT</span> hands to cast spells!</p>
 
                           <div className="border-t border-gray-700 pt-3 mt-3">
-                              <p className="text-yellow-400 font-bold mb-2">Dance Party Power-Ups:</p>
+                              <p className="text-purple-400 font-bold mb-2">🔮 Master These Spells:</p>
                               <div className="text-sm space-y-1">
                                   <p className="flex items-center gap-2">
-                                      <Zap className="w-4 h-4 text-orange-400" />
-                                      <span><span className="font-bold">Jump</span> = Slam Attack (clears screen!)</span>
+                                      <Zap className="w-4 h-4 text-yellow-400" />
+                                      <span><span className="font-bold">Jump</span> = Lightning Bolt (clears all!)</span>
                                   </p>
                                   <p className="flex items-center gap-2">
                                       <Shield className="w-4 h-4 text-cyan-400" />
-                                      <span><span className="font-bold">Squat</span> = Shield Bubble (3 lives)</span>
+                                      <span><span className="font-bold">Squat</span> = Shield Ward (3 blocks)</span>
                                   </p>
                                   <p className="flex items-center gap-2">
                                       <Wind className="w-4 h-4 text-purple-400" />
-                                      <span><span className="font-bold">Spin</span> = Tornado Mode (auto-hit!)</span>
+                                      <span><span className="font-bold">Spin</span> = Tornado Spell (auto-defeat!)</span>
                                   </p>
                                   <p className="flex items-center gap-2">
-                                      <Star className="w-4 h-4 text-yellow-400" />
-                                      <span><span className="font-bold">Dab</span> = Mega Multiplier!</span>
+                                      <Star className="w-4 h-4 text-blue-400" />
+                                      <span><span className="font-bold">Freeze</span> = Ice Blast (mega power!)</span>
                                   </p>
                               </div>
                           </div>
@@ -364,15 +367,15 @@ const App: React.FC = () => {
                           <div className="flex flex-col items-center gap-3">
                               <button
                                   onClick={startGame}
-                                  className="bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] flex items-center justify-center gap-3"
+                                  className="bg-purple-600 hover:bg-purple-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] flex items-center justify-center gap-3"
                               >
-                                  <Play fill="currentColor" /> START GAME
+                                  <Sparkles fill="currentColor" /> BEGIN TRAINING
                               </button>
                               <button
                                   onClick={() => setShowTutorial(true)}
                                   className="bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-2 px-6 rounded-full transition-all flex items-center gap-2"
                               >
-                                  <HelpCircle className="w-4 h-4" /> How to Play
+                                  <HelpCircle className="w-4 h-4" /> Spell Guide
                               </button>
                           </div>
                       )}
@@ -384,16 +387,17 @@ const App: React.FC = () => {
               )}
 
               {(gameStatus === GameStatus.GAME_OVER || gameStatus === GameStatus.VICTORY) && (
-                  <div className="bg-black/90 p-12 rounded-3xl text-center border-2 border-white/10 backdrop-blur-xl">
-                      <h2 className={`text-6xl font-bold mb-4 ${gameStatus === GameStatus.VICTORY ? 'text-green-400' : 'text-red-500'}`}>
-                          {gameStatus === GameStatus.VICTORY ? "SEQUENCE COMPLETE" : "SYSTEM FAILURE"}
+                  <div className="bg-black/90 p-12 rounded-3xl text-center border-2 border-purple-500/30 backdrop-blur-xl">
+                      <h2 className={`text-6xl font-bold mb-4 ${gameStatus === GameStatus.VICTORY ? 'text-purple-400' : 'text-orange-500'}`}>
+                          {gameStatus === GameStatus.VICTORY ? "🎓 APPRENTICE GRADUATED!" : "⚠️ TRAINING INCOMPLETE"}
                       </h2>
-                      <p className="text-white text-3xl mb-8">Final Score: {score.toLocaleString()}</p>
-                      <button 
+                      <p className="text-white text-3xl mb-4">Magical Power: {score.toLocaleString()}</p>
+                      <p className="text-gray-300 text-lg mb-8">{gameStatus === GameStatus.VICTORY ? "You've mastered the spells!" : "Keep practicing, young wizard!"}</p>
+                      <button
                           onClick={() => setGameStatus(GameStatus.IDLE)}
-                          className="bg-white/10 hover:bg-white/20 text-white text-xl py-3 px-8 rounded-full flex items-center justify-center mx-auto gap-2 transition-colors"
+                          className="bg-purple-600 hover:bg-purple-500 text-white text-xl py-3 px-8 rounded-full flex items-center justify-center mx-auto gap-2 transition-colors"
                       >
-                          <RefreshCw /> Play Again
+                          <RefreshCw /> Train Again
                       </button>
                   </div>
               )}

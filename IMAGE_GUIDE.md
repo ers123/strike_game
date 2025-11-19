@@ -1,6 +1,6 @@
-# Image Assets Guide for Tempo Strike
+# Image Assets Guide for Spell Slinger Academy
 
-This guide describes the images you should create for the Tempo Strike Dance Party Edition app.
+This guide describes the images you should create for the Spell Slinger Academy app.
 
 ## Required Images
 
@@ -10,21 +10,21 @@ This guide describes the images you should create for the Tempo Strike Dance Par
 **Purpose:** Social media sharing preview (Facebook, Twitter, LinkedIn, etc.)
 
 **Content Suggestions:**
-- **Background:** Dark, energetic gradient (black to deep blue with stars)
-- **Main Title:** "TEMPO STRIKE" in large, bold, futuristic font (white/blue glow)
-- **Subtitle:** "Dance Party Edition" in smaller text
+- **Background:** Dark, mystical gradient (black to deep purple with stars and magical sparkles)
+- **Main Title:** "SPELL SLINGER ACADEMY" in large, bold, magical font (white/purple glow)
+- **Subtitle:** "Cast Spells with Gestures" in smaller text
 - **Visual Elements:**
-  - Stick figure doing a dab pose (bright yellow/gold)
-  - Musical notes and rhythm visualizer waves
+  - Wizard/apprentice figure casting a spell (bright purple/gold magical energy)
+  - Magical creatures (colorful orbs or fantasy monsters)
   - Camera icon to indicate motion tracking
-  - Power-up icons: ⚡ (Jump), 🛡️ (Shield), 🌪️ (Tornado), ⭐ (Dab)
-- **Text Overlay:** "Jump • Squat • Spin • Dab to Win!"
+  - Spell icons: ⚡ (Lightning), 🛡️ (Shield), 🌪️ (Tornado), ❄️ (Freeze)
+- **Text Overlay:** "Lightning • Shield • Tornado • Freeze Spells!"
 - **Footer:** "For Kids | Camera-Based | Tablet Ready"
 
 **Color Palette:**
-- Primary: Blue (#3b82f6)
-- Accents: Orange (#fb923c), Cyan (#06b6d4), Purple (#a855f7), Yellow (#fbbf24)
-- Background: Black (#000000) to Dark Blue gradient
+- Primary: Purple (#a855f7)
+- Accents: Yellow (#eab308), Cyan (#06b6d4), Blue (#3b82f6), Orange (#fb923c)
+- Background: Black (#000000) to Deep Purple gradient
 
 ---
 
@@ -34,11 +34,11 @@ This guide describes the images you should create for the Tempo Strike Dance Par
 **Purpose:** PWA icon, home screen icon
 
 **Content Suggestions:**
-- **Center:** Stylized "TS" monogram or lightning bolt spark
-- **Style:** Bold, modern, kid-friendly
-- **Colors:** Gradient from blue to purple with white/yellow highlights
-- **Border:** Slight glow effect
-- **Background:** Can be transparent or solid color
+- **Center:** Wizard hat with a star/wand, or stylized "SSA" monogram with magical sparkles
+- **Style:** Bold, mystical, kid-friendly
+- **Colors:** Gradient from purple to blue with white/yellow magical highlights
+- **Border:** Magical glow effect
+- **Background:** Can be transparent or dark purple
 - **Design:** Simple enough to be recognizable at small sizes
 
 ---
@@ -50,8 +50,8 @@ This guide describes the images you should create for the Tempo Strike Dance Par
 
 **Content Suggestions:**
 - Same design as 192x192 but with more detail
-- Can include subtle musical note patterns in background
-- More pronounced glow/shadow effects
+- Can include subtle magical sparkle or spell circle patterns in background
+- More pronounced magical glow/shadow effects
 - Ensure it looks good when scaled down
 
 ---
@@ -63,11 +63,11 @@ This guide describes the images you should create for the Tempo Strike Dance Par
 
 **Content Suggestions:**
 - Screenshot of actual gameplay showing:
-  - 3D notes flying toward camera
-  - Hand tracking overlay (optional)
-  - Score/combo UI visible
-  - One power-up active (tornado or shield effect visible)
-- Capture during an exciting moment (high combo, effects visible)
+  - 3D magical creatures flying toward camera
+  - Hand tracking overlay with spell sabers (optional)
+  - Magical power score/combo UI visible
+  - One spell active (tornado or shield spell effect visible)
+- Capture during an exciting moment (high combo, spell effects visible)
 
 ---
 
@@ -78,10 +78,10 @@ This guide describes the images you should create for the Tempo Strike Dance Par
 
 **Content Suggestions:**
 - Screenshot showing the tutorial/start screen with:
-  - Dance move illustrations visible
-  - "How to Play" modal open
-  - All 4 power-up icons clearly shown
-- OR: Action shot showing slam attack (jump power-up clearing screen)
+  - Spell gesture illustrations visible
+  - "Spell Guide" modal open
+  - All 4 spell icons clearly shown (Lightning, Shield, Tornado, Freeze)
+- OR: Action shot showing lightning spell clearing all creatures from screen
 
 ---
 
@@ -121,11 +121,11 @@ If you don't have professional design software, here are some free options:
 3. **Simple shapes** - Avoid overly complex illustrations
 
 ### Color Psychology:
-- **Blue** = Trust, fun, technology
+- **Purple** = Magic, creativity, power (PRIMARY)
+- **Yellow** = Lightning, energy, attention
+- **Blue** = Freeze spell, trust, technology
+- **Cyan** = Shield, protection, calm
 - **Orange** = Energy, excitement, action
-- **Purple** = Magic, creativity, power
-- **Yellow** = Joy, attention, success
-- **Cyan** = Protection, calm, modern
 
 ---
 
@@ -137,22 +137,22 @@ Until you have professional images, create simple placeholders:
 # Using ImageMagick (install first: brew install imagemagick / apt-get install imagemagick)
 
 # OG Image placeholder
-convert -size 1200x630 gradient:blue-black \
+convert -size 1200x630 gradient:purple-black \
   -pointsize 72 -fill white -gravity center \
-  -annotate +0-50 "TEMPO STRIKE" \
-  -pointsize 36 -annotate +0+50 "Dance Party Edition" \
+  -annotate +0-50 "SPELL SLINGER ACADEMY" \
+  -pointsize 36 -annotate +0+50 "Cast Magical Spells" \
   public/og-image.png
 
 # Icon 192 placeholder
-convert -size 192x192 gradient:blue-purple \
+convert -size 192x192 gradient:purple-blue \
   -pointsize 96 -fill white -gravity center \
-  -annotate +0+0 "TS" \
+  -annotate +0+0 "SSA" \
   public/icon-192.png
 
 # Icon 512 placeholder
-convert -size 512x512 gradient:blue-purple \
+convert -size 512x512 gradient:purple-blue \
   -pointsize 256 -fill white -gravity center \
-  -annotate +0+0 "TS" \
+  -annotate +0+0 "SSA" \
   public/icon-512.png
 ```
 

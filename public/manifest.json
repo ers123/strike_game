@@ -1,12 +1,12 @@
 {
-  "name": "Tempo Strike - Dance Party Edition",
-  "short_name": "Tempo Strike",
-  "description": "An exciting rhythm game for 4th graders! Slash beats with your hands and unlock power-ups by dancing - Jump, Squat, Spin, and Dab!",
+  "name": "Spell Slinger Academy",
+  "short_name": "Spell Slinger",
+  "description": "An exciting spell-casting game for 4th graders! Defeat magical creatures with hand spells and unlock power-ups by casting wizard gestures - Lightning, Shield, Tornado, and Freeze!",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#000000",
-  "theme_color": "#3b82f6",
+  "theme_color": "#a855f7",
   "scope": "/",
   "icons": [
     {
@@ -33,23 +33,23 @@
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Gameplay with hand tracking"
+      "label": "Spell casting with hand tracking"
     },
     {
       "src": "/screenshot-2.png",
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Power-ups in action"
+      "label": "Magical spell effects in action"
     }
   ],
   "related_applications": [],
   "prefer_related_applications": false,
   "shortcuts": [
     {
-      "name": "Start Game",
-      "short_name": "Play",
-      "description": "Jump right into the game",
+      "name": "Begin Training",
+      "short_name": "Train",
+      "description": "Start your wizard training",
       "url": "/?action=start",
       "icons": [
         {

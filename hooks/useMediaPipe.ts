@@ -24,7 +24,11 @@ const mapHandToWorld = (x: number, y: number): THREE.Vector3 => {
   return new THREE.Vector3(worldX, Math.max(0.1, worldY), worldZ);
 };
 
-export type BodyMovement = 'jump' | 'squat' | 'spin' | 'dab' | null;
+// Spell types for gesture-based magic casting
+export type SpellType = 'lightning' | 'shield' | 'tornado' | 'freeze' | null;
+
+// Legacy type for compatibility during transition
+export type BodyMovement = SpellType;
 
 export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -275,29 +279,29 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         const avgHipY = (leftHip.y + rightHip.y) / 2;
         const avgShoulderX = (leftShoulder.x + rightShoulder.x) / 2;
 
-        // --- JUMP DETECTION ---
+        // --- LIGHTNING SPELL DETECTION (Jump gesture) ---
         // If shoulders move up significantly (Y decreases in screen coords)
         if (poseDataRef.current.lastShoulderY !== null) {
             const shoulderDiff = poseDataRef.current.lastShoulderY - avgShoulderY;
             if (shoulderDiff > 0.08) { // Jumped up
-                poseDataRef.current.detectedMovement = 'jump';
+                poseDataRef.current.detectedMovement = 'lightning';
                 poseDataRef.current.movementCooldown = 20; // ~20 frames cooldown
-                console.log('🚀 JUMP detected!');
+                console.log('⚡ LIGHTNING SPELL cast!');
             }
         }
 
-        // --- SQUAT DETECTION ---
+        // --- SHIELD SPELL DETECTION (Squat gesture) ---
         // If hips move down significantly (Y increases in screen coords)
         if (poseDataRef.current.lastHipY !== null) {
             const hipDiff = avgHipY - poseDataRef.current.lastHipY;
             if (hipDiff > 0.1) { // Squatting down
-                poseDataRef.current.detectedMovement = 'squat';
+                poseDataRef.current.detectedMovement = 'shield';
                 poseDataRef.current.movementCooldown = 30;
-                console.log('🛡️ SQUAT detected!');
+                console.log('🛡️ SHIELD SPELL cast!');
             }
         }
 
-        // --- SPIN DETECTION ---
+        // --- TORNADO SPELL DETECTION (Spin gesture) ---
         // Track shoulder rotation over time
         poseDataRef.current.rotationHistory.push(avgShoulderX);
         if (poseDataRef.current.rotationHistory.length > 15) {
@@ -311,14 +315,14 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
 
             // Check for significant lateral movement
             if (rotationAmount > 0.3) {
-                poseDataRef.current.detectedMovement = 'spin';
+                poseDataRef.current.detectedMovement = 'tornado';
                 poseDataRef.current.movementCooldown = 40;
                 poseDataRef.current.rotationHistory = []; // Reset
-                console.log('🌀 SPIN detected!');
+                console.log('🌪️ TORNADO SPELL cast!');
             }
         }
 
-        // --- DAB DETECTION ---
+        // --- FREEZE SPELL DETECTION (Dab-style gesture) ---
         // One arm across body, one arm extended out
         // Check if right wrist is near left shoulder AND left arm extended
         if (leftWrist && rightWrist && leftElbow && rightElbow) {
@@ -330,12 +334,12 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
             const leftArmExtended = (leftWrist.x < leftElbow.x - 0.1); // Left arm pointing left
 
             if (rightWristToLeftShoulder < 0.15 && leftArmExtended) {
-                poseDataRef.current.detectedMovement = 'dab';
+                poseDataRef.current.detectedMovement = 'freeze';
                 poseDataRef.current.movementCooldown = 30;
-                console.log('😎 DAB detected!');
+                console.log('❄️ FREEZE SPELL cast!');
             }
 
-            // Check reverse dab (left wrist to right shoulder)
+            // Check reverse freeze gesture (left wrist to right shoulder)
             const leftWristToRightShoulder = Math.sqrt(
                 Math.pow(leftWrist.x - rightShoulder.x, 2) +
                 Math.pow(leftWrist.y - rightShoulder.y, 2)
@@ -344,9 +348,9 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
             const rightArmExtended = (rightWrist.x > rightElbow.x + 0.1); // Right arm pointing right
 
             if (leftWristToRightShoulder < 0.15 && rightArmExtended) {
-                poseDataRef.current.detectedMovement = 'dab';
+                poseDataRef.current.detectedMovement = 'freeze';
                 poseDataRef.current.movementCooldown = 30;
-                console.log('😎 DAB detected!');
+                console.log('❄️ FREEZE SPELL cast!');
             }
         }
 
