@@ -4,7 +4,7 @@
 */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { HandLandmarker, FilesetResolver, HandLandmarkerResult } from '@mediapipe/tasks-vision';
+import { HandLandmarker, PoseLandmarker, FilesetResolver, HandLandmarkerResult, PoseLandmarkerResult } from '@mediapipe/tasks-vision';
 import * as THREE from 'three';
 
 // Mapping 2D normalized coordinates to 3D game world.
@@ -23,6 +23,8 @@ const mapHandToWorld = (x: number, y: number): THREE.Vector3 => {
 
   return new THREE.Vector3(worldX, Math.max(0.1, worldY), worldZ);
 };
+
+export type BodyMovement = 'jump' | 'squat' | 'spin' | 'dab' | null;
 
 export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -46,10 +48,29 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
     lastTimestamp: 0
   });
 
+  // Body pose tracking for dance moves
+  const poseDataRef = useRef<{
+    landmarks: any[] | null;
+    lastShoulderY: number | null;
+    lastHipY: number | null;
+    rotationHistory: number[];
+    detectedMovement: BodyMovement;
+    movementCooldown: number;
+  }>({
+    landmarks: null,
+    lastShoulderY: null,
+    lastHipY: null,
+    rotationHistory: [],
+    detectedMovement: null,
+    movementCooldown: 0
+  });
+
   // To expose raw results for UI preview
   const lastResultsRef = useRef<HandLandmarkerResult | null>(null);
+  const lastPoseResultsRef = useRef<PoseLandmarkerResult | null>(null);
 
   const landmarkerRef = useRef<HandLandmarker | null>(null);
+  const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
   const requestRef = useRef<number>(0);
 
   useEffect(() => {
@@ -60,9 +81,10 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
         );
-        
+
         if (!isActive) return;
 
+        // Initialize hand landmarker
         const landmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
@@ -80,11 +102,30 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
              return;
         }
 
+        // Initialize pose landmarker for body tracking
+        const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task`,
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          minPoseDetectionConfidence: 0.5,
+          minPosePresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        if (!isActive) {
+             landmarker.close();
+             poseLandmarker.close();
+             return;
+        }
+
         landmarkerRef.current = landmarker;
+        poseLandmarkerRef.current = poseLandmarker;
         startCamera();
       } catch (err: any) {
         console.error("Error initializing MediaPipe:", err);
-        setError(`Failed to load hand tracking: ${err.message}`);
+        setError(`Failed to load tracking: ${err.message}`);
       }
     };
 
@@ -114,16 +155,22 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
     };
 
     const predictWebcam = () => {
-        if (!videoRef.current || !landmarkerRef.current || !isActive) return;
+        if (!videoRef.current || !landmarkerRef.current || !poseLandmarkerRef.current || !isActive) return;
 
         const video = videoRef.current;
         // Only process if video has data
         if (video.videoWidth > 0 && video.videoHeight > 0) {
              let startTimeMs = performance.now();
              try {
-                 const results = landmarkerRef.current.detectForVideo(video, startTimeMs);
-                 lastResultsRef.current = results;
-                 processResults(results);
+                 // Process hands
+                 const handResults = landmarkerRef.current.detectForVideo(video, startTimeMs);
+                 lastResultsRef.current = handResults;
+                 processResults(handResults);
+
+                 // Process pose
+                 const poseResults = poseLandmarkerRef.current.detectForVideo(video, startTimeMs);
+                 lastPoseResultsRef.current = poseResults;
+                 processPoseResults(poseResults);
              } catch (e) {
                  // Sometimes detectForVideo fails if timestamps aren't strictly increasing or video is not ready
                  console.warn("Detection failed this frame", e);
@@ -193,6 +240,121 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         }
     };
 
+    const processPoseResults = (results: PoseLandmarkerResult) => {
+        if (!results.landmarks || results.landmarks.length === 0) {
+            poseDataRef.current.landmarks = null;
+            return;
+        }
+
+        const landmarks = results.landmarks[0]; // First person detected
+        poseDataRef.current.landmarks = landmarks;
+
+        // Decrease cooldown
+        if (poseDataRef.current.movementCooldown > 0) {
+            poseDataRef.current.movementCooldown -= 1;
+            return; // Don't detect new movements during cooldown
+        }
+
+        // MediaPipe Pose Landmarks:
+        // 11, 12 = Left/Right Shoulder
+        // 23, 24 = Left/Right Hip
+        // 13, 14 = Left/Right Elbow
+        // 15, 16 = Left/Right Wrist
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+        const leftElbow = landmarks[13];
+        const rightElbow = landmarks[14];
+        const leftWrist = landmarks[15];
+        const rightWrist = landmarks[16];
+
+        if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) return;
+
+        const avgShoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+        const avgHipY = (leftHip.y + rightHip.y) / 2;
+        const avgShoulderX = (leftShoulder.x + rightShoulder.x) / 2;
+
+        // --- JUMP DETECTION ---
+        // If shoulders move up significantly (Y decreases in screen coords)
+        if (poseDataRef.current.lastShoulderY !== null) {
+            const shoulderDiff = poseDataRef.current.lastShoulderY - avgShoulderY;
+            if (shoulderDiff > 0.08) { // Jumped up
+                poseDataRef.current.detectedMovement = 'jump';
+                poseDataRef.current.movementCooldown = 20; // ~20 frames cooldown
+                console.log('🚀 JUMP detected!');
+            }
+        }
+
+        // --- SQUAT DETECTION ---
+        // If hips move down significantly (Y increases in screen coords)
+        if (poseDataRef.current.lastHipY !== null) {
+            const hipDiff = avgHipY - poseDataRef.current.lastHipY;
+            if (hipDiff > 0.1) { // Squatting down
+                poseDataRef.current.detectedMovement = 'squat';
+                poseDataRef.current.movementCooldown = 30;
+                console.log('🛡️ SQUAT detected!');
+            }
+        }
+
+        // --- SPIN DETECTION ---
+        // Track shoulder rotation over time
+        poseDataRef.current.rotationHistory.push(avgShoulderX);
+        if (poseDataRef.current.rotationHistory.length > 15) {
+            poseDataRef.current.rotationHistory.shift();
+        }
+
+        if (poseDataRef.current.rotationHistory.length === 15) {
+            const first = poseDataRef.current.rotationHistory[0];
+            const last = poseDataRef.current.rotationHistory[14];
+            const rotationAmount = Math.abs(last - first);
+
+            // Check for significant lateral movement
+            if (rotationAmount > 0.3) {
+                poseDataRef.current.detectedMovement = 'spin';
+                poseDataRef.current.movementCooldown = 40;
+                poseDataRef.current.rotationHistory = []; // Reset
+                console.log('🌀 SPIN detected!');
+            }
+        }
+
+        // --- DAB DETECTION ---
+        // One arm across body, one arm extended out
+        // Check if right wrist is near left shoulder AND left arm extended
+        if (leftWrist && rightWrist && leftElbow && rightElbow) {
+            const rightWristToLeftShoulder = Math.sqrt(
+                Math.pow(rightWrist.x - leftShoulder.x, 2) +
+                Math.pow(rightWrist.y - leftShoulder.y, 2)
+            );
+
+            const leftArmExtended = (leftWrist.x < leftElbow.x - 0.1); // Left arm pointing left
+
+            if (rightWristToLeftShoulder < 0.15 && leftArmExtended) {
+                poseDataRef.current.detectedMovement = 'dab';
+                poseDataRef.current.movementCooldown = 30;
+                console.log('😎 DAB detected!');
+            }
+
+            // Check reverse dab (left wrist to right shoulder)
+            const leftWristToRightShoulder = Math.sqrt(
+                Math.pow(leftWrist.x - rightShoulder.x, 2) +
+                Math.pow(leftWrist.y - rightShoulder.y, 2)
+            );
+
+            const rightArmExtended = (rightWrist.x > rightElbow.x + 0.1); // Right arm pointing right
+
+            if (leftWristToRightShoulder < 0.15 && rightArmExtended) {
+                poseDataRef.current.detectedMovement = 'dab';
+                poseDataRef.current.movementCooldown = 30;
+                console.log('😎 DAB detected!');
+            }
+        }
+
+        // Store current values for next frame
+        poseDataRef.current.lastShoulderY = avgShoulderY;
+        poseDataRef.current.lastHipY = avgHipY;
+    };
+
     setupMediaPipe();
 
     return () => {
@@ -203,6 +365,9 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
       if (landmarkerRef.current) {
           landmarkerRef.current.close();
       }
+      if (poseLandmarkerRef.current) {
+          poseLandmarkerRef.current.close();
+      }
       if (videoRef.current && videoRef.current.srcObject) {
           const stream = videoRef.current.srcObject as MediaStream;
           stream.getTracks().forEach(t => t.stop());
@@ -210,5 +375,5 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
     };
   }, [videoRef]);
 
-  return { isCameraReady, handPositionsRef, lastResultsRef, error };
+  return { isCameraReady, handPositionsRef, poseDataRef, lastResultsRef, lastPoseResultsRef, error };
 };

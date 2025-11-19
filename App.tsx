@@ -9,10 +9,17 @@ import { Canvas } from '@react-three/fiber';
 import { Loader, useProgress } from '@react-three/drei';
 import { GameStatus, NoteData } from './types';
 import { DEMO_CHART, SONG_URL, SONG_BPM } from './constants';
-import { useMediaPipe } from './hooks/useMediaPipe';
+import { useMediaPipe, BodyMovement } from './hooks/useMediaPipe';
 import GameScene from './components/GameScene';
 import WebcamPreview from './components/WebcamPreview';
-import { Play, RefreshCw, VideoOff, Hand, Sparkles } from 'lucide-react';
+import { Play, RefreshCw, VideoOff, Hand, Sparkles, Zap, Shield, Wind, Star } from 'lucide-react';
+
+export type PowerUp = {
+  type: BodyMovement;
+  active: boolean;
+  duration: number;
+  activatedAt: number;
+};
 
 const App: React.FC = () => {
   const [gameStatus, setGameStatus] = useState<GameStatus>(GameStatus.LOADING);
@@ -20,12 +27,17 @@ const App: React.FC = () => {
   const [combo, setCombo] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
   const [health, setHealth] = useState(100);
+  const [activePowerUp, setActivePowerUp] = useState<BodyMovement>(null);
+  const [powerUpTimeLeft, setPowerUpTimeLeft] = useState(0);
+  const [shieldActive, setShieldActive] = useState(false);
+  const [shieldCharges, setShieldCharges] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement>(new Audio(SONG_URL));
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  // Now getting lastResultsRef from the hook
-  const { isCameraReady, handPositionsRef, lastResultsRef, error: cameraError } = useMediaPipe(videoRef);
+  const lastProcessedMovementRef = useRef<number>(0);
+
+  // Now getting pose data from the hook
+  const { isCameraReady, handPositionsRef, poseDataRef, lastResultsRef, lastPoseResultsRef, error: cameraError } = useMediaPipe(videoRef);
   const { progress } = useProgress(); 
 
   // Game Logic Handlers
@@ -52,6 +64,26 @@ const App: React.FC = () => {
   }, [multiplier]);
 
   const handleNoteMiss = useCallback((note: NoteData) => {
+      // Check if shield is active
+      if (shieldActive && shieldCharges > 0) {
+          setShieldCharges(c => {
+              const newCharges = c - 1;
+              if (newCharges === 0) {
+                  setShieldActive(false);
+                  if (activePowerUp === 'squat') {
+                      setActivePowerUp(null);
+                      setPowerUpTimeLeft(0);
+                  }
+              }
+              return newCharges;
+          });
+          // Shield absorbed the hit - no health loss!
+          if (navigator.vibrate) {
+              navigator.vibrate(100);
+          }
+          return;
+      }
+
       setCombo(0);
       setMultiplier(1);
       setHealth(h => {
@@ -62,15 +94,19 @@ const App: React.FC = () => {
           }
           return newHealth;
       });
-  }, []);
+  }, [shieldActive, shieldCharges, activePowerUp]);
 
   const startGame = async () => {
     if (!isCameraReady) return;
-    
+
     setScore(0);
     setCombo(0);
     setMultiplier(1);
     setHealth(100);
+    setActivePowerUp(null);
+    setPowerUpTimeLeft(0);
+    setShieldActive(false);
+    setShieldCharges(0);
 
     DEMO_CHART.forEach(n => { n.hit = false; n.missed = false; });
 
@@ -99,6 +135,77 @@ const App: React.FC = () => {
       }
   }, [isCameraReady, gameStatus]);
 
+  // Monitor for body movements and activate power-ups
+  useEffect(() => {
+      if (gameStatus !== GameStatus.PLAYING) return;
+
+      const interval = setInterval(() => {
+          const detectedMovement = poseDataRef.current.detectedMovement;
+          const cooldown = poseDataRef.current.movementCooldown;
+
+          // Only process if there's a new movement detection
+          if (detectedMovement && cooldown > 0 && Date.now() - lastProcessedMovementRef.current > 500) {
+              lastProcessedMovementRef.current = Date.now();
+
+              // Haptic feedback
+              if (navigator.vibrate) {
+                  navigator.vibrate([50, 30, 50]);
+              }
+
+              switch (detectedMovement) {
+                  case 'jump':
+                      // Jump = Slam attack (clears all notes on screen)
+                      setActivePowerUp('jump');
+                      setPowerUpTimeLeft(1); // Instant effect
+                      setScore(s => s + 500); // Bonus points
+                      break;
+
+                  case 'squat':
+                      // Squat = Shield bubble (protects from 3 misses)
+                      setShieldActive(true);
+                      setShieldCharges(3);
+                      setActivePowerUp('squat');
+                      setPowerUpTimeLeft(5); // Visual effect duration
+                      break;
+
+                  case 'spin':
+                      // Spin = Tornado mode (auto-collect notes in radius)
+                      setActivePowerUp('spin');
+                      setPowerUpTimeLeft(5); // 5 seconds
+                      break;
+
+                  case 'dab':
+                      // Dab = Confidence boost (bonus multiplier)
+                      setActivePowerUp('dab');
+                      setPowerUpTimeLeft(8); // 8 seconds
+                      setMultiplier(m => m * 2); // Double current multiplier
+                      setScore(s => s + 200); // Instant bonus
+                      break;
+              }
+
+              // Clear the detected movement
+              poseDataRef.current.detectedMovement = null;
+          }
+
+          // Countdown active power-up
+          if (powerUpTimeLeft > 0) {
+              setPowerUpTimeLeft(t => {
+                  const newTime = Math.max(0, t - 0.1);
+                  if (newTime === 0) {
+                      setActivePowerUp(null);
+                      // Reset multiplier if dab is ending
+                      if (activePowerUp === 'dab') {
+                          setMultiplier(m => Math.max(1, m / 2));
+                      }
+                  }
+                  return newTime;
+              });
+          }
+      }, 100); // Check every 100ms
+
+      return () => clearInterval(interval);
+  }, [gameStatus, powerUpTimeLeft, activePowerUp, poseDataRef]);
+
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
       {/* Hidden Video for Processing */}
@@ -114,7 +221,7 @@ const App: React.FC = () => {
       {/* 3D Canvas */}
       <Canvas shadows dpr={[1, 2]}>
           {gameStatus !== GameStatus.LOADING && (
-             <GameScene 
+             <GameScene
                 gameStatus={gameStatus}
                 audioRef={audioRef}
                 handPositionsRef={handPositionsRef}
@@ -122,6 +229,8 @@ const App: React.FC = () => {
                 onNoteHit={handleNoteHit}
                 onNoteMiss={handleNoteMiss}
                 onSongEnd={() => endGame(true)}
+                activePowerUp={activePowerUp}
+                shieldActive={shieldActive}
              />
           )}
       </Canvas>
@@ -165,8 +274,34 @@ const App: React.FC = () => {
                      )}
                  </div>
              </div>
-             
-             <div className="w-1/3"></div>
+
+             {/* Active Power-Up & Shield Status */}
+             <div className="w-1/3 flex flex-col items-end gap-2">
+                 {shieldActive && shieldCharges > 0 && (
+                     <div className="flex items-center gap-2 bg-cyan-900/80 px-4 py-2 rounded-full border-2 border-cyan-400 animate-pulse">
+                         <Shield className="w-6 h-6 text-cyan-300" />
+                         <span className="text-cyan-100 font-bold">Shield x{shieldCharges}</span>
+                     </div>
+                 )}
+                 {activePowerUp && activePowerUp !== 'squat' && (
+                     <div className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 ${
+                         activePowerUp === 'jump' ? 'bg-orange-900/80 border-orange-400' :
+                         activePowerUp === 'spin' ? 'bg-purple-900/80 border-purple-400' :
+                         activePowerUp === 'dab' ? 'bg-yellow-900/80 border-yellow-400' :
+                         'bg-gray-900/80 border-gray-400'
+                     } animate-pulse`}>
+                         {activePowerUp === 'jump' && <Zap className="w-6 h-6 text-orange-300" />}
+                         {activePowerUp === 'spin' && <Wind className="w-6 h-6 text-purple-300" />}
+                         {activePowerUp === 'dab' && <Star className="w-6 h-6 text-yellow-300" />}
+                         <span className="text-white font-bold">
+                             {activePowerUp === 'jump' && 'SLAM!'}
+                             {activePowerUp === 'spin' && 'TORNADO'}
+                             {activePowerUp === 'dab' && 'DAB BOOST'}
+                         </span>
+                         <span className="text-xs text-gray-300">{powerUpTimeLeft.toFixed(1)}s</span>
+                     </div>
+                 )}
+             </div>
           </div>
 
           {/* Menus (Centered) */}
@@ -189,13 +324,34 @@ const App: React.FC = () => {
                       <h1 className="text-7xl font-black text-white mb-6 tracking-tighter italic drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]">
                           TEMPO <span className="text-blue-500">STRIKE</span>
                       </h1>
-                      <div className="space-y-4 text-gray-300 mb-8">
+                      <div className="space-y-3 text-gray-300 mb-8">
                           <p className="flex items-center justify-center gap-2">
-                              <Hand className="w-5 h-5 text-blue-400" /> 
-                              <span>Stand back so your hands are visible.</span>
+                              <Hand className="w-5 h-5 text-blue-400" />
+                              <span>Stand back so your whole body is visible.</span>
                           </p>
-                          <p>Use your <span className="text-red-500 font-bold">LEFT</span> and <span className="text-blue-500 font-bold">RIGHT</span> hands.</p>
-                          <p>Slash the <span className="text-white font-bold">Sparks</span> to the beat!</p>
+                          <p>Use your <span className="text-red-500 font-bold">LEFT</span> and <span className="text-blue-500 font-bold">RIGHT</span> hands to slash!</p>
+
+                          <div className="border-t border-gray-700 pt-3 mt-3">
+                              <p className="text-yellow-400 font-bold mb-2">Dance Party Power-Ups:</p>
+                              <div className="text-sm space-y-1">
+                                  <p className="flex items-center gap-2">
+                                      <Zap className="w-4 h-4 text-orange-400" />
+                                      <span><span className="font-bold">Jump</span> = Slam Attack (clears screen!)</span>
+                                  </p>
+                                  <p className="flex items-center gap-2">
+                                      <Shield className="w-4 h-4 text-cyan-400" />
+                                      <span><span className="font-bold">Squat</span> = Shield Bubble (3 lives)</span>
+                                  </p>
+                                  <p className="flex items-center gap-2">
+                                      <Wind className="w-4 h-4 text-purple-400" />
+                                      <span><span className="font-bold">Spin</span> = Tornado Mode (auto-hit!)</span>
+                                  </p>
+                                  <p className="flex items-center gap-2">
+                                      <Star className="w-4 h-4 text-yellow-400" />
+                                      <span><span className="font-bold">Dab</span> = Mega Multiplier!</span>
+                                  </p>
+                              </div>
+                          </div>
                       </div>
 
                       {!isCameraReady ? (
