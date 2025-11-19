@@ -12,6 +12,7 @@ import { GameStatus, NoteData, HandPositions, COLORS, CutDirection } from '../ty
 import { PLAYER_Z, SPAWN_Z, MISS_Z, NOTE_SPEED, DIRECTION_VECTORS, NOTE_SIZE, LANE_X_POSITIONS, LAYER_Y_POSITIONS, SONG_BPM } from '../constants';
 import Note from './Note';
 import Saber from './Saber';
+import { BodyMovement } from '../hooks/useMediaPipe';
 
 interface GameSceneProps {
   gameStatus: GameStatus;
@@ -21,18 +22,22 @@ interface GameSceneProps {
   onNoteHit: (note: NoteData, goodCut: boolean) => void;
   onNoteMiss: (note: NoteData) => void;
   onSongEnd: () => void;
+  activePowerUp: BodyMovement;
+  shieldActive: boolean;
 }
 
 const BEAT_TIME = 60 / SONG_BPM;
 
-const GameScene: React.FC<GameSceneProps> = ({ 
-    gameStatus, 
-    audioRef, 
-    handPositionsRef, 
+const GameScene: React.FC<GameSceneProps> = ({
+    gameStatus,
+    audioRef,
+    handPositionsRef,
     chart,
     onNoteHit,
     onNoteMiss,
-    onSongEnd
+    onSongEnd,
+    activePowerUp,
+    shieldActive
 }) => {
   // Local state for notes to trigger re-renders when they are hit/missed
   const [notesState, setNotesState] = useState<NoteData[]>(chart);
@@ -45,6 +50,9 @@ const GameScene: React.FC<GameSceneProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   const spotLightRef = useRef<THREE.SpotLight>(null);
+  const lastPowerUpRef = useRef<BodyMovement>(null);
+  const tornadoEffectRef = useRef<THREE.Mesh>(null);
+  const shieldEffectRef = useRef<THREE.Mesh>(null);
 
   // Helper Vector3s for collision to avoid GC
   const vecA = useMemo(() => new THREE.Vector3(), []);
@@ -57,6 +65,45 @@ const GameScene: React.FC<GameSceneProps> = ({
   }
 
   useFrame((state, delta) => {
+    // --- Power-Up Effects ---
+    // Jump slam attack - clear all active notes
+    if (activePowerUp === 'jump' && lastPowerUpRef.current !== 'jump') {
+        lastPowerUpRef.current = 'jump';
+        // Hit all active notes
+        activeNotesRef.current.forEach(note => {
+            if (!note.hit && !note.missed) {
+                note.hit = true;
+                note.hitTime = audioRef.current?.currentTime || 0;
+                onNoteHit(note, true);
+            }
+        });
+        activeNotesRef.current = [];
+        shakeIntensity.current = 1.0; // Big shake!
+    } else if (activePowerUp !== 'jump') {
+        if (lastPowerUpRef.current === 'jump') {
+            lastPowerUpRef.current = null;
+        }
+    }
+
+    // Tornado effect rotation
+    if (tornadoEffectRef.current) {
+        tornadoEffectRef.current.visible = activePowerUp === 'spin';
+        if (activePowerUp === 'spin') {
+            tornadoEffectRef.current.rotation.y += delta * 3;
+            tornadoEffectRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.3 + 1.5;
+        }
+    }
+
+    // Shield effect
+    if (shieldEffectRef.current) {
+        shieldEffectRef.current.visible = shieldActive;
+        if (shieldActive) {
+            shieldEffectRef.current.rotation.y += delta * 2;
+            const pulse = Math.sin(state.clock.elapsedTime * 4) * 0.1 + 1.0;
+            shieldEffectRef.current.scale.setScalar(pulse);
+        }
+    }
+
     // --- Beat Pulsing ---
     // Calculate a value from 0 to 1 that peaks exactly on the beat and decays quickly
     // phase is 0.0 right ON the beat, and goes up to 1.0 just before next beat
@@ -64,8 +111,8 @@ const GameScene: React.FC<GameSceneProps> = ({
         const time = audioRef.current.currentTime;
         const beatPhase = (time % BEAT_TIME) / BEAT_TIME;
         // Sharp decay curve: Math.pow(1 - beatPhase, 3)
-        const pulse = Math.pow(1 - beatPhase, 4); 
-        
+        const pulse = Math.pow(1 - beatPhase, 4);
+
         if (ambientLightRef.current) {
             ambientLightRef.current.intensity = 0.1 + (pulse * 0.3);
         }
@@ -123,7 +170,7 @@ const GameScene: React.FC<GameSceneProps> = ({
         if (note.hit || note.missed) continue;
 
         // Calculate current Z position
-        const timeDiff = note.time - time; 
+        const timeDiff = note.time - time;
         const currentZ = PLAYER_Z - (timeDiff * NOTE_SPEED);
 
         // Miss check (passed player)
@@ -132,6 +179,25 @@ const GameScene: React.FC<GameSceneProps> = ({
             onNoteMiss(note);
             activeNotesRef.current.splice(i, 1);
             continue;
+        }
+
+        // Tornado auto-hit (spin power-up)
+        if (activePowerUp === 'spin' && currentZ > PLAYER_Z - 2 && currentZ < PLAYER_Z + 0.5) {
+            const notePos = vecA.set(
+                LANE_X_POSITIONS[note.lineIndex],
+                LAYER_Y_POSITIONS[note.lineLayer],
+                currentZ
+            );
+            const playerPos = vecB.set(0, 1.5, PLAYER_Z);
+
+            // Auto-hit notes within tornado radius
+            if (playerPos.distanceTo(notePos) < 2.5) {
+                note.hit = true;
+                note.hitTime = time;
+                handleHit(note, true);
+                activeNotesRef.current.splice(i, 1);
+                continue;
+            }
         }
 
         // Collision check (only if near player)
@@ -157,12 +223,12 @@ const GameScene: React.FC<GameSceneProps> = ({
                          const requiredDir = DIRECTION_VECTORS[note.cutDirection];
                          vecB.copy(handVel).normalize();
                          const dot = vecB.dot(requiredDir);
-                         
-                         if (dot < 0.3 || speed < 1.5) { 
+
+                         if (dot < 0.3 || speed < 1.5) {
                              goodCut = false;
                          }
                      } else {
-                         if (speed < 1.5) goodCut = false; 
+                         if (speed < 1.5) goodCut = false;
                      }
 
                      note.hit = true;
@@ -222,11 +288,38 @@ const GameScene: React.FC<GameSceneProps> = ({
       <Saber type="left" positionRef={leftHandPosRef} velocityRef={leftHandVelRef} />
       <Saber type="right" positionRef={rightHandPosRef} velocityRef={rightHandVelRef} />
 
+      {/* Tornado Effect (Spin Power-Up) */}
+      <mesh ref={tornadoEffectRef} position={[0, 1.5, PLAYER_Z]} visible={false}>
+        <coneGeometry args={[2, 3, 32, 1, true]} />
+        <meshStandardMaterial
+          color="#a855f7"
+          transparent
+          opacity={0.3}
+          side={THREE.DoubleSide}
+          emissive="#a855f7"
+          emissiveIntensity={0.5}
+          wireframe
+        />
+      </mesh>
+
+      {/* Shield Effect (Squat Power-Up) */}
+      <mesh ref={shieldEffectRef} position={[0, 1.5, PLAYER_Z]} visible={false}>
+        <sphereGeometry args={[1.5, 32, 32]} />
+        <meshStandardMaterial
+          color="#06b6d4"
+          transparent
+          opacity={0.2}
+          emissive="#06b6d4"
+          emissiveIntensity={0.8}
+          wireframe
+        />
+      </mesh>
+
       {visibleNotes.map(note => (
-          <Note 
-            key={note.id} 
-            data={note} 
-            zPos={PLAYER_Z - ((note.time - currentTime) * NOTE_SPEED)} 
+          <Note
+            key={note.id}
+            data={note}
+            zPos={PLAYER_Z - ((note.time - currentTime) * NOTE_SPEED)}
             currentTime={currentTime}
           />
       ))}
