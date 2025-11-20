@@ -220,8 +220,18 @@ const App: React.FC = () => {
         style={{ width: '640px', height: '480px' }}
       />
 
-      {/* 3D Canvas */}
-      <Canvas shadows dpr={[1, 2]}>
+      {/* 3D Canvas - Optimized for tablet performance */}
+      <Canvas
+        shadows
+        dpr={[1, 1.5]}
+        performance={{ min: 0.5 }}
+        gl={{
+          antialias: true,
+          powerPreference: 'high-performance',
+          alpha: false
+        }}
+        frameloop="always"
+      >
           {gameStatus !== GameStatus.LOADING && (
              <GameScene
                 gameStatus={gameStatus}

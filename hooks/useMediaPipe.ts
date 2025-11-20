@@ -76,6 +76,8 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
   const requestRef = useRef<number>(0);
+  const lastProcessTimeRef = useRef<number>(0);
+  const PROCESS_INTERVAL = 1000 / 30; // Throttle to 30fps for better tablet performance
 
   useEffect(() => {
     let isActive = true;
@@ -162,23 +164,29 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         if (!videoRef.current || !landmarkerRef.current || !poseLandmarkerRef.current || !isActive) return;
 
         const video = videoRef.current;
-        // Only process if video has data
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
-             let startTimeMs = performance.now();
-             try {
-                 // Process hands
-                 const handResults = landmarkerRef.current.detectForVideo(video, startTimeMs);
-                 lastResultsRef.current = handResults;
-                 processResults(handResults);
+        const now = performance.now();
 
-                 // Process pose
-                 const poseResults = poseLandmarkerRef.current.detectForVideo(video, startTimeMs);
-                 lastPoseResultsRef.current = poseResults;
-                 processPoseResults(poseResults);
-             } catch (e) {
-                 // Sometimes detectForVideo fails if timestamps aren't strictly increasing or video is not ready
-                 console.warn("Detection failed this frame", e);
-             }
+        // Throttle processing for better tablet performance
+        if (now - lastProcessTimeRef.current >= PROCESS_INTERVAL) {
+            lastProcessTimeRef.current = now;
+
+            // Only process if video has data
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+                 try {
+                     // Process hands
+                     const handResults = landmarkerRef.current.detectForVideo(video, now);
+                     lastResultsRef.current = handResults;
+                     processResults(handResults);
+
+                     // Process pose
+                     const poseResults = poseLandmarkerRef.current.detectForVideo(video, now);
+                     lastPoseResultsRef.current = poseResults;
+                     processPoseResults(poseResults);
+                 } catch (e) {
+                     // Sometimes detectForVideo fails if timestamps aren't strictly increasing or video is not ready
+                     console.warn("Detection failed this frame", e);
+                 }
+            }
         }
 
         requestRef.current = requestAnimationFrame(predictWebcam);

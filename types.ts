@@ -44,8 +44,8 @@ export interface HandPositions {
 }
 
 export const COLORS = {
-  left: '#ef4444',  // Red-ish
-  right: '#3b82f6', // Blue-ish
+  left: '#a855f7',  // Purple (magical creature type 1)
+  right: '#06b6d4', // Cyan (magical creature type 2)
   track: '#111111',
   hittable: '#ffffff'
 };
