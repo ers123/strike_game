@@ -6,6 +6,7 @@
 
 import { CutDirection, NoteData } from "./types";
 import * as THREE from 'three';
+import { LevelConfig } from './progression';
 
 // Game World Config
 export const TRACK_LENGTH = 50;
@@ -25,75 +26,95 @@ export const LAYER_Y_POSITIONS = [0.8, 1.6, 2.4]; // Low, Mid, High
 // Audio
 // Using a solid rhythmic track that is free to use.
 export const SONG_URL = 'https://commondatastorage.googleapis.com/codeskulptor-demos/riceracer_assets/music/race2.ogg';
-export const SONG_BPM = 140; 
-const BEAT_TIME = 60 / SONG_BPM;
+export const SONG_BPM = 140; // Default BPM (will vary by level)
 
-// Generate a simple rhythmic chart
-export const generateDemoChart = (): NoteData[] => {
+// Generate a chart based on level configuration
+export const generateLevelChart = (levelConfig: LevelConfig): NoteData[] => {
   const notes: NoteData[] = [];
   let idCount = 0;
+  const bpm = levelConfig.bpm;
+  const targetCreatures = levelConfig.targetCreatures;
+  const duration = levelConfig.duration;
+  const BEAT_TIME = 60 / bpm;
 
-  // Simple pattern generator
-  for (let i = 4; i < 200; i += 2) { // Start after 4 beats
-    const time = i * BEAT_TIME;
-    
-    // Alternate hands every 4 beats, or do simultaneously sometimes
-    const pattern = Math.floor(i / 16) % 3;
+  // Calculate spawn interval to fit target creatures in duration
+  const spawnInterval = (duration - 4) / targetCreatures; // Start after 4 seconds
 
-    if (pattern === 0) {
-      // Simple alternation
-      if (i % 4 === 0) {
-         notes.push({
+  // Difficulty adjustments based on level
+  const difficulty = Math.min(5, Math.floor((levelConfig.id - 1) / 5) + 1);
+  const doubleHitChance = Math.min(0.3, difficulty * 0.06); // More double hits as difficulty increases
+  const streamChance = Math.min(0.2, (difficulty - 1) * 0.05); // Faster streams later
+
+  let currentTime = 4; // Start after 4 seconds
+
+  for (let i = 0; i < targetCreatures; i++) {
+    const rand = Math.random();
+
+    if (rand < doubleHitChance) {
+      // Double hits (both hands)
+      const layer = Math.floor(Math.random() * 3);
+      notes.push(
+        {
           id: `note-${idCount++}`,
-          time: time,
-          lineIndex: 1,
-          lineLayer: 0,
+          time: currentTime,
+          lineIndex: 0,
+          lineLayer: layer,
           type: 'left',
           cutDirection: CutDirection.ANY
-        });
-      } else {
-        notes.push({
+        },
+        {
           id: `note-${idCount++}`,
-          time: time,
-          lineIndex: 2,
-          lineLayer: 0,
+          time: currentTime,
+          lineIndex: 3,
+          lineLayer: layer,
           type: 'right',
           cutDirection: CutDirection.ANY
-        });
-      }
-    } else if (pattern === 1) {
-      // Double hits
-      if (i % 8 === 0) {
-         notes.push(
-           { id: `note-${idCount++}`, time, lineIndex: 0, lineLayer: 1, type: 'left', cutDirection: CutDirection.ANY },
-           { id: `note-${idCount++}`, time, lineIndex: 3, lineLayer: 1, type: 'right', cutDirection: CutDirection.ANY }
-         );
-      }
+        }
+      );
+      i++; // Count as 2 creatures
+    } else if (rand < doubleHitChance + streamChance) {
+      // Stream (fast alternation)
+      const layer = Math.floor(Math.random() * 2);
+      notes.push(
+        {
+          id: `note-${idCount++}`,
+          time: currentTime,
+          lineIndex: 1,
+          lineLayer: layer,
+          type: 'left',
+          cutDirection: CutDirection.ANY
+        },
+        {
+          id: `note-${idCount++}`,
+          time: currentTime + BEAT_TIME * 0.5,
+          lineIndex: 2,
+          lineLayer: layer,
+          type: 'right',
+          cutDirection: CutDirection.ANY
+        }
+      );
+      i++; // Count as 2 creatures
     } else {
-      // Streams (faster)
+      // Single note - alternating hands
+      const hand = i % 2 === 0 ? 'left' : 'right';
+      const lane = hand === 'left' ? (Math.random() < 0.5 ? 0 : 1) : (Math.random() < 0.5 ? 2 : 3);
+      const layer = Math.floor(Math.random() * 3);
+
       notes.push({
         id: `note-${idCount++}`,
-        time: time,
-        lineIndex: 1,
-        lineLayer: 0,
-        type: 'left',
-        cutDirection: CutDirection.ANY
-      });
-       notes.push({
-        id: `note-${idCount++}`,
-        time: time + BEAT_TIME,
-        lineIndex: 2,
-        lineLayer: 0,
-        type: 'right',
+        time: currentTime,
+        lineIndex: lane,
+        lineLayer: layer,
+        type: hand,
         cutDirection: CutDirection.ANY
       });
     }
+
+    currentTime += spawnInterval * BEAT_TIME;
   }
 
   return notes.sort((a, b) => a.time - b.time);
 };
-
-export const DEMO_CHART = generateDemoChart();
 
 // Vectors for direction checking
 export const DIRECTION_VECTORS: Record<CutDirection, THREE.Vector3> = {

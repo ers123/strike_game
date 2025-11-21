@@ -3,49 +3,88 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Loader, useProgress } from '@react-three/drei';
 import { GameStatus, NoteData } from './types';
-import { DEMO_CHART, SONG_URL, SONG_BPM } from './constants';
+import { generateLevelChart, SONG_URL } from './constants';
 import { useMediaPipe, BodyMovement } from './hooks/useMediaPipe';
 import GameScene from './components/GameScene';
 import WebcamPreview from './components/WebcamPreview';
 import TutorialModal from './components/TutorialModal';
+import LevelSelect from './components/LevelSelect';
+import LevelComplete from './components/LevelComplete';
+import {
+  PlayerData,
+  loadPlayerData,
+  savePlayerData,
+  LEVELS,
+  getCurrentRank,
+  calculateStars,
+  WIZARD_RANKS,
+  getProgressToNextRank
+} from './progression';
 import { Play, RefreshCw, VideoOff, Hand, Sparkles, Zap, Shield, Wind, Star, HelpCircle } from 'lucide-react';
 
-export type PowerUp = {
-  type: BodyMovement;
-  active: boolean;
-  duration: number;
-  activatedAt: number;
-};
+type AppScreen = 'loading' | 'menu' | 'levelSelect' | 'playing' | 'levelComplete';
 
 const App: React.FC = () => {
+  // Screens
+  const [screen, setScreen] = useState<AppScreen>('loading');
+  const [currentLevelId, setCurrentLevelId] = useState(1);
+
+  // Player progression
+  const [playerData, setPlayerData] = useState<PlayerData>(loadPlayerData());
+
+  // Game state
   const [gameStatus, setGameStatus] = useState<GameStatus>(GameStatus.LOADING);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
   const [health, setHealth] = useState(100);
+  const [creaturesDefeated, setCreaturesDefeated] = useState(0);
+  const [creaturesMissed, setCreaturesMissed] = useState(0);
+  
+  // Spells
   const [activePowerUp, setActivePowerUp] = useState<BodyMovement>(null);
   const [powerUpTimeLeft, setPowerUpTimeLeft] = useState(0);
   const [shieldActive, setShieldActive] = useState(false);
   const [shieldCharges, setShieldCharges] = useState(0);
+  const [spellsCastThisLevel, setSpellsCastThisLevel] = useState({
+    lightning: 0,
+    shield: 0,
+    tornado: 0,
+    freeze: 0
+  });
+
+  // UI
   const [showTutorial, setShowTutorial] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(new Audio(SONG_URL));
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastProcessedMovementRef = useRef<number>(0);
+  const currentChartRef = useRef<NoteData[]>([]);
 
-  // Now getting pose data from the hook
+  // MediaPipe hook
   const { isCameraReady, handPositionsRef, poseDataRef, lastResultsRef, lastPoseResultsRef, error: cameraError } = useMediaPipe(videoRef);
-  const { progress } = useProgress(); 
+  const { progress } = useProgress();
+
+  // Load player data on mount
+  useEffect(() => {
+    const loaded = loadPlayerData();
+    setPlayerData(loaded);
+  }, []);
+
+  // Save player data whenever it changes
+  useEffect(() => {
+    savePlayerData(playerData);
+  }, [playerData]);
 
   // Game Logic Handlers
   const handleNoteHit = useCallback((note: NoteData, goodCut: boolean) => {
      let points = 100;
-     if (goodCut) points += 50; 
+     if (goodCut) points += 50;
 
      // Haptic feedback for impact
      if (navigator.vibrate) {
@@ -54,6 +93,7 @@ const App: React.FC = () => {
 
      setCombo(c => {
        const newCombo = c + 1;
+       setMaxCombo(mc => Math.max(mc, newCombo));
        if (newCombo > 30) setMultiplier(8);
        else if (newCombo > 20) setMultiplier(4);
        else if (newCombo > 10) setMultiplier(2);
@@ -63,6 +103,7 @@ const App: React.FC = () => {
 
      setScore(s => s + (points * multiplier));
      setHealth(h => Math.min(100, h + 2));
+     setCreaturesDefeated(c => c + 1);
   }, [multiplier]);
 
   const handleNoteMiss = useCallback((note: NoteData) => {
@@ -88,6 +129,7 @@ const App: React.FC = () => {
 
       setCombo(0);
       setMultiplier(1);
+      setCreaturesMissed(c => c + 1);
       setHealth(h => {
           const newHealth = h - 15;
           if (newHealth <= 0) {
@@ -98,25 +140,39 @@ const App: React.FC = () => {
       });
   }, [shieldActive, shieldCharges, activePowerUp]);
 
-  const startGame = async () => {
+  const startLevel = async (levelId: number) => {
     if (!isCameraReady) return;
 
+    // Get level config and generate chart
+    const level = LEVELS.find(l => l.id === levelId);
+    if (!level) return;
+
+    currentChartRef.current = generateLevelChart(level);
+    setCurrentLevelId(levelId);
+
+    // Reset game state
     setScore(0);
     setCombo(0);
+    setMaxCombo(0);
     setMultiplier(1);
     setHealth(100);
+    setCreaturesDefeated(0);
+    setCreaturesMissed(0);
     setActivePowerUp(null);
     setPowerUpTimeLeft(0);
     setShieldActive(false);
     setShieldCharges(0);
+    setSpellsCastThisLevel({ lightning: 0, shield: 0, tornado: 0, freeze: 0 });
 
-    DEMO_CHART.forEach(n => { n.hit = false; n.missed = false; });
+    // Reset chart
+    currentChartRef.current.forEach(n => { n.hit = false; n.missed = false; });
 
     try {
       if (audioRef.current) {
           audioRef.current.currentTime = 0;
           await audioRef.current.play();
           setGameStatus(GameStatus.PLAYING);
+          setScreen('playing');
       }
     } catch (e) {
         console.error("Audio play failed", e);
@@ -129,17 +185,66 @@ const App: React.FC = () => {
       if (audioRef.current) {
           audioRef.current.pause();
       }
+
+      // Calculate results
+      const totalCreatures = creaturesDefeated + creaturesMissed;
+      const accuracy = totalCreatures > 0 ? creaturesDefeated / totalCreatures : 0;
+      const totalSpells = Object.values(spellsCastThisLevel).reduce((sum, count) => sum + count, 0);
+      const stars = calculateStars(accuracy, maxCombo, totalSpells);
+
+      // Update player data
+      const oldRank = playerData.currentRank;
+      const newTotalScore = playerData.totalScore + score;
+      const newRank = getCurrentRank(newTotalScore);
+
+      const updatedData = { ...playerData };
+      updatedData.totalScore = newTotalScore;
+      updatedData.currentRank = newRank;
+
+      // Update level completion
+      if (!updatedData.levelsCompleted.includes(currentLevelId)) {
+        updatedData.levelsCompleted.push(currentLevelId);
+      }
+
+      // Update stars (only if better)
+      const previousStars = updatedData.levelStars[currentLevelId] || 0;
+      if (stars > previousStars) {
+        updatedData.levelStars[currentLevelId] = stars;
+      }
+
+      // Update best score (only if better)
+      const previousBest = updatedData.levelBestScores[currentLevelId] || 0;
+      if (score > previousBest) {
+        updatedData.levelBestScores[currentLevelId] = score;
+      }
+
+      // Update accuracy
+      updatedData.levelAccuracy[currentLevelId] = accuracy;
+
+      // Update stats
+      updatedData.stats.totalCreaturesDefeated += creaturesDefeated;
+      updatedData.stats.bestCombo = Math.max(updatedData.stats.bestCombo, maxCombo);
+      updatedData.stats.totalSpellsCast.lightning += spellsCastThisLevel.lightning;
+      updatedData.stats.totalSpellsCast.shield += spellsCastThisLevel.shield;
+      updatedData.stats.totalSpellsCast.tornado += spellsCastThisLevel.tornado;
+      updatedData.stats.totalSpellsCast.freeze += spellsCastThisLevel.freeze;
+
+      setPlayerData(updatedData);
+
+      // Show level complete screen
+      setTimeout(() => setScreen('levelComplete'), 500);
   };
 
   useEffect(() => {
       if (gameStatus === GameStatus.LOADING && isCameraReady) {
           setGameStatus(GameStatus.IDLE);
+          setScreen('menu');
       }
   }, [isCameraReady, gameStatus]);
 
   // Monitor for body movements and activate power-ups
   useEffect(() => {
-      if (gameStatus !== GameStatus.PLAYING) return;
+      if (screen !== 'playing') return;
 
       const interval = setInterval(() => {
           const detectedMovement = poseDataRef.current.detectedMovement;
@@ -149,70 +254,173 @@ const App: React.FC = () => {
           if (detectedMovement && cooldown > 0 && Date.now() - lastProcessedMovementRef.current > 500) {
               lastProcessedMovementRef.current = Date.now();
 
-              // Haptic feedback
-              if (navigator.vibrate) {
-                  navigator.vibrate([50, 30, 50]);
-              }
+              // Track spell cast
+              setSpellsCastThisLevel(prev => ({
+                ...prev,
+                [detectedMovement]: (prev[detectedMovement as keyof typeof prev] || 0) + 1
+              }));
 
               switch (detectedMovement) {
                   case 'lightning':
-                      // Lightning Spell = Clears all creatures on screen
                       setActivePowerUp('lightning');
-                      setPowerUpTimeLeft(1); // Instant effect
-                      setScore(s => s + 500); // Bonus points
+                      setPowerUpTimeLeft(1);
+                      setScore(s => s + 500);
                       break;
 
                   case 'shield':
-                      // Shield Spell = Protects from 3 attacks
                       setShieldActive(true);
                       setShieldCharges(3);
                       setActivePowerUp('shield');
-                      setPowerUpTimeLeft(5); // Visual effect duration
+                      setPowerUpTimeLeft(5);
                       break;
 
                   case 'tornado':
-                      // Tornado Spell = Auto-defeat creatures in radius
                       setActivePowerUp('tornado');
-                      setPowerUpTimeLeft(5); // 5 seconds
+                      setPowerUpTimeLeft(5);
                       break;
 
                   case 'freeze':
-                      // Freeze Spell = Slow time and boost power
                       setActivePowerUp('freeze');
-                      setPowerUpTimeLeft(8); // 8 seconds
-                      setMultiplier(m => m * 2); // Double current multiplier
-                      setScore(s => s + 200); // Instant bonus
+                      setPowerUpTimeLeft(8);
+                      setMultiplier(m => m * 2);
+                      setScore(s => s + 200);
                       break;
               }
-
-              // Clear the detected movement
-              poseDataRef.current.detectedMovement = null;
           }
-
-          // Countdown active power-up
-          if (powerUpTimeLeft > 0) {
-              setPowerUpTimeLeft(t => {
-                  const newTime = Math.max(0, t - 0.1);
-                  if (newTime === 0) {
-                      setActivePowerUp(null);
-                      // Reset multiplier if freeze spell is ending
-                      if (activePowerUp === 'freeze') {
-                          setMultiplier(m => Math.max(1, m / 2));
-                      }
-                  }
-                  return newTime;
-              });
-          }
-      }, 100); // Check every 100ms
+      }, 100);
 
       return () => clearInterval(interval);
-  }, [gameStatus, powerUpTimeLeft, activePowerUp, poseDataRef]);
+  }, [screen, poseDataRef]);
+
+  // Power-up timer
+  useEffect(() => {
+      if (powerUpTimeLeft <= 0) return;
+
+      const interval = setInterval(() => {
+          setPowerUpTimeLeft(t => {
+              const newTime = t - 0.1;
+              if (newTime <= 0) {
+                  setActivePowerUp(null);
+                  if (activePowerUp === 'freeze') {
+                      setMultiplier(m => Math.max(1, m / 2));
+                  }
+              }
+              return newTime;
+          });
+      }, 100);
+
+      return () => clearInterval(interval);
+  }, [powerUpTimeLeft, activePowerUp]);
+
+  // Render based on screen
+  const renderScreen = () => {
+    const currentRank = WIZARD_RANKS[playerData.currentRank];
+
+    switch (screen) {
+      case 'loading':
+        return (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-purple-950 via-black to-black text-white pointer-events-auto">
+            <Sparkles className="w-20 h-20 text-purple-400 mb-6 animate-pulse" />
+            <h1 className="text-4xl font-bold mb-4">Spell Slinger Academy</h1>
+            <p className="text-gray-400 mb-8">Initializing camera...</p>
+            {cameraError && (
+              <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 max-w-md">
+                <p className="text-red-200">{cameraError}</p>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'menu':
+        return (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-purple-950 via-black to-black text-white pointer-events-auto">
+            <div className="text-center mb-12">
+              <h1 className="text-6xl font-black text-white mb-3 tracking-tighter drop-shadow-[0_0_30px_rgba(168,85,247,0.6)]">
+                SPELL SLINGER
+              </h1>
+              <h2 className="text-4xl font-bold text-purple-400 mb-6 italic drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">
+                Academy
+              </h2>
+              <div className="flex items-center justify-center gap-2 text-xl" style={{ color: currentRank.color }}>
+                <Sparkles className="w-6 h-6" />
+                <span>{currentRank.name}</span>
+              </div>
+              <p className="text-gray-400 mt-2">Score: {playerData.totalScore.toLocaleString()}</p>
+            </div>
+
+            <div className="flex flex-col gap-4 mb-8">
+              <button
+                onClick={() => setScreen('levelSelect')}
+                className="bg-purple-600 hover:bg-purple-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] flex items-center justify-center gap-3"
+              >
+                <Play fill="currentColor" /> BEGIN TRAINING
+              </button>
+
+              <button
+                onClick={() => setShowTutorial(true)}
+                className="bg-gray-700 hover:bg-gray-600 text-white text-lg font-bold py-3 px-8 rounded-full transition-all flex items-center justify-center gap-2"
+              >
+                <HelpCircle /> Spell Guide
+              </button>
+            </div>
+
+            <div className="text-center text-gray-500 text-sm">
+              <p>Total Creatures Defeated: {playerData.stats.totalCreaturesDefeated}</p>
+              <p className="mt-2">✨ Camera Ready</p>
+            </div>
+          </div>
+        );
+
+      case 'levelSelect':
+        return (
+          <LevelSelect
+            playerData={playerData}
+            onSelectLevel={(levelId) => startLevel(levelId)}
+            onBack={() => setScreen('menu')}
+          />
+        );
+
+      case 'levelComplete':
+        const previousBest = playerData.levelBestScores[currentLevelId] || 0;
+        const previousStars = playerData.levelStars[currentLevelId] || 0;
+        const oldRank = getCurrentRank(playerData.totalScore - score);
+        const totalCreatures = creaturesDefeated + creaturesMissed;
+        const accuracy = totalCreatures > 0 ? creaturesDefeated / totalCreatures : 0;
+
+        return (
+          <LevelComplete
+            levelId={currentLevelId}
+            score={score}
+            accuracy={accuracy}
+            maxCombo={maxCombo}
+            creaturesDefeated={creaturesDefeated}
+            spellsCast={spellsCastThisLevel}
+            previousBestScore={previousBest}
+            previousStars={previousStars}
+            newTotalScore={playerData.totalScore}
+            oldRank={oldRank}
+            newRank={playerData.currentRank}
+            onNextLevel={() => {
+              const nextLevel = currentLevelId + 1;
+              if (LEVELS.find(l => l.id === nextLevel)) {
+                startLevel(nextLevel);
+              }
+            }}
+            onReplay={() => startLevel(currentLevelId)}
+            onLevelSelect={() => setScreen('levelSelect')}
+          />
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
       {/* Hidden Video for Processing */}
-      <video 
-        ref={videoRef} 
+      <video
+        ref={videoRef}
         className="absolute opacity-0 pointer-events-none"
         playsInline
         muted
@@ -232,12 +440,12 @@ const App: React.FC = () => {
         }}
         frameloop="always"
       >
-          {gameStatus !== GameStatus.LOADING && (
+          {screen === 'playing' && (
              <GameScene
                 gameStatus={gameStatus}
                 audioRef={audioRef}
                 handPositionsRef={handPositionsRef}
-                chart={DEMO_CHART}
+                chart={currentChartRef.current}
                 onNoteHit={handleNoteHit}
                 onNoteMiss={handleNoteMiss}
                 onSongEnd={() => endGame(true)}
@@ -248,39 +456,47 @@ const App: React.FC = () => {
       </Canvas>
 
       {/* Webcam Mini-Map Preview */}
-      <WebcamPreview 
-          videoRef={videoRef} 
-          resultsRef={lastResultsRef} 
-          isCameraReady={isCameraReady} 
-      />
+      {screen === 'playing' && (
+        <WebcamPreview
+          videoRef={videoRef}
+          resultsRef={lastResultsRef}
+          isCameraReady={isCameraReady}
+        />
+      )}
 
-      {/* UI Overlay */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
-          
+      {/* UI Overlays */}
+      {screen === 'playing' && (
+        <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
           {/* HUD (Top) */}
           <div className="flex justify-between items-start text-white w-full">
+             {/* Level Info */}
+             <div className="bg-black/60 px-4 py-2 rounded-lg border border-purple-500/50">
+               <p className="text-sm text-purple-300">Year 1</p>
+               <p className="text-xl font-bold text-white">Level {currentLevelId}</p>
+             </div>
+
              {/* Health Bar */}
-             <div className="w-1/3 max-w-xs">
+             <div className="w-1/4 max-w-xs">
                  <div className="h-4 bg-gray-800 rounded-full overflow-hidden border-2 border-gray-700">
-                     <div 
-                        className={`h-full transition-all duration-300 ease-out ${health > 50 ? 'bg-green-500' : health > 20 ? 'bg-yellow-500' : 'bg-red-600'}`}
-                        style={{ width: `${health}%` }}
+                     <div
+                        className={"h-full transition-all duration-300 ease-out " + (health > 50 ? 'bg-green-500' : health > 20 ? 'bg-yellow-500' : 'bg-red-600')}
+                        style={{ width: health + '%' }}
                      />
                  </div>
-                 <p className="text-xs mt-1 opacity-70">System Integrity</p>
+                 <p className="text-xs mt-1 opacity-70 text-center">Health</p>
              </div>
 
              {/* Score & Combo */}
              <div className="text-center">
-                 <h1 className="text-5xl font-bold tracking-wider drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">
+                 <h1 className="text-5xl font-bold tracking-wider drop-shadow-[0_0_10px_rgba(168,85,247,0.8)]">
                      {score.toLocaleString()}
                  </h1>
                  <div className="mt-2 flex flex-col items-center">
-                     <p className={`text-2xl font-bold ${combo > 10 ? 'text-blue-400 scale-110' : 'text-gray-300'} transition-all`}>
+                     <p className={"text-2xl font-bold " + (combo > 10 ? 'text-purple-400 scale-110' : 'text-gray-300') + " transition-all"}>
                          {combo}x COMBO
                      </p>
                      {multiplier > 1 && (
-                         <span className="text-sm px-2 py-1 bg-blue-900 rounded-full mt-1 animate-pulse">
+                         <span className="text-sm px-2 py-1 bg-purple-900 rounded-full mt-1 animate-pulse">
                              {multiplier}x Multiplier!
                          </span>
                      )}
@@ -288,7 +504,7 @@ const App: React.FC = () => {
              </div>
 
              {/* Active Power-Up & Shield Status */}
-             <div className="w-1/3 flex flex-col items-end gap-2">
+             <div className="w-1/4 flex flex-col items-end gap-2">
                  {shieldActive && shieldCharges > 0 && (
                      <div className="flex items-center gap-2 bg-cyan-900/80 px-4 py-2 rounded-full border-2 border-cyan-400 animate-pulse">
                          <Shield className="w-6 h-6 text-cyan-300" />
@@ -296,12 +512,12 @@ const App: React.FC = () => {
                      </div>
                  )}
                  {activePowerUp && activePowerUp !== 'shield' && (
-                     <div className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 ${
+                     <div className={"flex items-center gap-2 px-4 py-2 rounded-full border-2 " + (
                          activePowerUp === 'lightning' ? 'bg-yellow-900/80 border-yellow-400' :
                          activePowerUp === 'tornado' ? 'bg-purple-900/80 border-purple-400' :
                          activePowerUp === 'freeze' ? 'bg-blue-900/80 border-blue-400' :
                          'bg-gray-900/80 border-gray-400'
-                     } animate-pulse`}>
+                     ) + " animate-pulse"}>
                          {activePowerUp === 'lightning' && <Zap className="w-6 h-6 text-yellow-300" />}
                          {activePowerUp === 'tornado' && <Wind className="w-6 h-6 text-purple-300" />}
                          {activePowerUp === 'freeze' && <Star className="w-6 h-6 text-blue-300" />}
@@ -310,112 +526,36 @@ const App: React.FC = () => {
                              {activePowerUp === 'tornado' && 'TORNADO!'}
                              {activePowerUp === 'freeze' && 'FREEZE!'}
                          </span>
-                         <span className="text-xs text-gray-300">{powerUpTimeLeft.toFixed(1)}s</span>
                      </div>
                  )}
              </div>
           </div>
 
-          {/* Menus (Centered) */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-              
-              {gameStatus === GameStatus.LOADING && (
-                  <div className="bg-black/80 p-10 rounded-2xl flex flex-col items-center border border-purple-900/50 backdrop-blur-md">
-                      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500 mb-6"></div>
-                      <h2 className="text-2xl text-white font-bold mb-2">🔮 Preparing Spell Chamber...</h2>
-                      <p className="text-purple-300">{!isCameraReady ? "Awaiting magical vision..." : "Loading spellbook..."}</p>
-                      {cameraError && <p className="text-red-500 mt-4 max-w-xs text-center">{cameraError}</p>}
-                  </div>
-              )}
-
-              {gameStatus === GameStatus.IDLE && (
-                  <div className="bg-black/80 p-12 rounded-3xl text-center border-2 border-purple-500/30 backdrop-blur-xl max-w-lg">
-                      <div className="mb-6 flex justify-center">
-                         <Sparkles className="w-16 h-16 text-purple-400" />
-                      </div>
-                      <h1 className="text-6xl font-black text-white mb-3 tracking-tighter drop-shadow-[0_0_30px_rgba(168,85,247,0.6)]">
-                          SPELL SLINGER
-                      </h1>
-                      <h2 className="text-4xl font-bold text-purple-400 mb-6 italic drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">
-                          Academy
-                      </h2>
-                      <div className="space-y-3 text-gray-300 mb-8">
-                          <p className="flex items-center justify-center gap-2">
-                              <Hand className="w-5 h-5 text-purple-400" />
-                              <span>Stand back so your whole body is visible.</span>
-                          </p>
-                          <p>Use your <span className="text-red-500 font-bold">LEFT</span> and <span className="text-blue-500 font-bold">RIGHT</span> hands to cast spells!</p>
-
-                          <div className="border-t border-gray-700 pt-3 mt-3">
-                              <p className="text-purple-400 font-bold mb-2">🔮 Master These Spells:</p>
-                              <div className="text-sm space-y-1">
-                                  <p className="flex items-center gap-2">
-                                      <Zap className="w-4 h-4 text-yellow-400" />
-                                      <span><span className="font-bold">Jump</span> = Lightning Bolt (clears all!)</span>
-                                  </p>
-                                  <p className="flex items-center gap-2">
-                                      <Shield className="w-4 h-4 text-cyan-400" />
-                                      <span><span className="font-bold">Squat</span> = Shield Ward (3 blocks)</span>
-                                  </p>
-                                  <p className="flex items-center gap-2">
-                                      <Wind className="w-4 h-4 text-purple-400" />
-                                      <span><span className="font-bold">Spin</span> = Tornado Spell (auto-defeat!)</span>
-                                  </p>
-                                  <p className="flex items-center gap-2">
-                                      <Star className="w-4 h-4 text-blue-400" />
-                                      <span><span className="font-bold">Freeze</span> = Ice Blast (mega power!)</span>
-                                  </p>
-                              </div>
-                          </div>
-                      </div>
-
-                      {!isCameraReady ? (
-                           <div className="flex items-center justify-center text-red-400 gap-2 bg-red-900/20 p-4 rounded-lg">
-                               <VideoOff /> Camera not ready yet.
-                           </div>
-                      ) : (
-                          <div className="flex flex-col items-center gap-3">
-                              <button
-                                  onClick={startGame}
-                                  className="bg-purple-600 hover:bg-purple-500 text-white text-xl font-bold py-4 px-12 rounded-full transition-all transform hover:scale-105 hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] flex items-center justify-center gap-3"
-                              >
-                                  <Sparkles fill="currentColor" /> BEGIN TRAINING
-                              </button>
-                              <button
-                                  onClick={() => setShowTutorial(true)}
-                                  className="bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-2 px-6 rounded-full transition-all flex items-center gap-2"
-                              >
-                                  <HelpCircle className="w-4 h-4" /> Spell Guide
-                              </button>
-                          </div>
-                      )}
-
-                      <div className="text-white/30 text-sm text-center mt-8">
-                           Created by <a href="https://x.com/ammaar" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors underline decoration-blue-400/30">@ammaar</a>
-                      </div>
-                  </div>
-              )}
-
-              {(gameStatus === GameStatus.GAME_OVER || gameStatus === GameStatus.VICTORY) && (
-                  <div className="bg-black/90 p-12 rounded-3xl text-center border-2 border-purple-500/30 backdrop-blur-xl">
-                      <h2 className={`text-6xl font-bold mb-4 ${gameStatus === GameStatus.VICTORY ? 'text-purple-400' : 'text-orange-500'}`}>
-                          {gameStatus === GameStatus.VICTORY ? "🎓 APPRENTICE GRADUATED!" : "⚠️ TRAINING INCOMPLETE"}
-                      </h2>
-                      <p className="text-white text-3xl mb-4">Magical Power: {score.toLocaleString()}</p>
-                      <p className="text-gray-300 text-lg mb-8">{gameStatus === GameStatus.VICTORY ? "You've mastered the spells!" : "Keep practicing, young wizard!"}</p>
-                      <button
-                          onClick={() => setGameStatus(GameStatus.IDLE)}
-                          className="bg-purple-600 hover:bg-purple-500 text-white text-xl py-3 px-8 rounded-full flex items-center justify-center mx-auto gap-2 transition-colors"
-                      >
-                          <RefreshCw /> Train Again
-                      </button>
-                  </div>
-              )}
+          {/* Rank Progress Bar (Bottom) */}
+          <div className="w-full max-w-md mx-auto bg-black/60 px-4 py-2 rounded-lg border border-purple-500/30">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span style={{ color: WIZARD_RANKS[playerData.currentRank].color }}>
+                {WIZARD_RANKS[playerData.currentRank].name}
+              </span>
+              <span>{Math.round(getProgressToNextRank(playerData.totalScore) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all"
+                style={{ width: (getProgressToNextRank(playerData.totalScore) * 100) + '%' }}
+              />
+            </div>
           </div>
-      </div>
+        </div>
+      )}
+
+      {/* Screen Overlays */}
+      {renderScreen()}
 
       {/* Tutorial Modal */}
-      <TutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
+      {showTutorial && (
+        <TutorialModal onClose={() => setShowTutorial(false)} />
+      )}
     </div>
   );
 };
